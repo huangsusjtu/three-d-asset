@@ -55,8 +55,8 @@ gltf = { version = "1", optional = true, features = [
     "KHR_materials_ior",
     "KHR_materials_transmission",
 ] }
-# wavefront_obj = { version = "10", optional = true }
-wavefront_obj = { git = "git@github.com:huangsusjtu/wavefront_obj.git", optional = true }
+ wavefront_obj = { path = "../wavefront_obj", optional = true }
+
 image = { version = "0.24", optional = true, default-features = false }
 pcd-rs = { version = "0.10", optional = true, features = ["derive"] }
 data-url = { version = "0.3", optional = true }
