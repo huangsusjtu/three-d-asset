@@ -1,6 +1,7 @@
 use crate::{geometry::*, io::RawAssets, material::*, Node, Result, Scene};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use wavefront_obj::obj::Object;
 
 pub fn dependencies_obj(raw_assets: &RawAssets, path: &PathBuf) -> HashSet<PathBuf> {
     let mut dependencies = HashSet::new();
@@ -53,7 +54,8 @@ pub fn dependencies_mtl(raw_assets: &RawAssets, path: &PathBuf) -> HashSet<PathB
 
 pub fn deserialize_obj(raw_assets: &mut RawAssets, path: &PathBuf) -> Result<Scene> {
     let obj_bytes = raw_assets.remove(path)?;
-    let obj = wavefront_obj::obj::parse(std::str::from_utf8(&obj_bytes).unwrap())?;
+    let str_content = std::str::from_utf8(&obj_bytes).unwrap();
+    let obj = wavefront_obj::obj::parse(str_content)?;
     let p = path.parent().unwrap_or(Path::new(""));
 
     // Parse materials
@@ -117,6 +119,7 @@ pub fn deserialize_obj(raw_assets: &mut RawAssets, path: &PathBuf) -> Result<Sce
     // Parse meshes
     let mut nodes = Vec::new();
     for object in obj.objects.iter() {
+        println!("{}", object.name);
         // Objects consisting of several meshes with different materials
         for mesh in object.geometry.iter() {
             // All meshes with different materials
@@ -124,56 +127,38 @@ pub fn deserialize_obj(raw_assets: &mut RawAssets, path: &PathBuf) -> Result<Sce
             let mut normals: Vec<Vec3> = Vec::new();
             let mut uvs: Vec<Vec2> = Vec::new();
             let mut indices = Vec::new();
-
             let mut map: HashMap<usize, usize> = HashMap::new();
-
-            let mut process = |i: wavefront_obj::obj::VTNIndex| {
-                let mut index = map.get(&i.0).map(|v| *v);
-
-                let uvw = i.1.map(|tex_index| object.tex_vertices[tex_index]);
-                let normal = i.2.map(|normal_index| object.normals[normal_index]);
-
-                if let Some(ind) = index {
-                    if let Some(tex) = uvw {
-                        if ((uvs[ind].x - tex.u as f32) as f32).abs() > std::f32::EPSILON
-                            || ((uvs[ind].y - tex.v as f32) as f32).abs() > std::f32::EPSILON
-                        {
-                            index = None;
-                        }
-                    }
-                    if let Some(n) = normal {
-                        if ((normals[ind].x - n.x as f32) as f32).abs() > std::f32::EPSILON
-                            || ((normals[ind].y - n.y as f32) as f32).abs() > std::f32::EPSILON
-                            || ((normals[ind].z - n.z as f32) as f32).abs() > std::f32::EPSILON
-                        {
-                            index = None;
-                        }
-                    }
-                }
-
-                if index.is_none() {
-                    index = Some(positions.len());
-                    map.insert(i.0, index.unwrap());
-                    let position = object.vertices[i.0];
-                    positions.push(Vector3::new(position.x, position.y, position.z));
-
-                    if let Some(tex) = uvw {
-                        uvs.push(Vec2::new(tex.u as f32, 1.0 - tex.v as f32));
-                    }
-                    if let Some(n) = normal {
-                        normals.push(Vec3::new(n.x as f32, n.y as f32, n.z as f32));
-                    }
-                }
-
-                indices.push(index.unwrap() as u32);
-            };
             for shape in mesh.shapes.iter() {
                 // All triangles with same material
                 match shape.primitive {
                     wavefront_obj::obj::Primitive::Triangle(i0, i1, i2) => {
-                        process(i0);
-                        process(i1);
-                        process(i2);
+                        process(
+                            i0,
+                            &mut map,
+                            &mut positions,
+                            &mut normals,
+                            &mut uvs,
+                            &mut indices,
+                            &object,
+                        );
+                        process(
+                            i1,
+                            &mut map,
+                            &mut positions,
+                            &mut normals,
+                            &mut uvs,
+                            &mut indices,
+                            &object,
+                        );
+                        process(
+                            i2,
+                            &mut map,
+                            &mut positions,
+                            &mut normals,
+                            &mut uvs,
+                            &mut indices,
+                            &object,
+                        );
                     }
                     _ => {}
                 }
@@ -213,6 +198,67 @@ pub fn deserialize_obj(raw_assets: &mut RawAssets, path: &PathBuf) -> Result<Sce
         children: nodes,
         materials,
     })
+}
+
+#[inline]
+fn process(
+    i: wavefront_obj::obj::VTNIndex,
+    map: &mut HashMap<usize, usize>,
+    positions: &mut Vec<Vector3<f64>>,
+    normals: &mut Vec<Vec3>,
+    uvs: &mut Vec<Vec2>,
+    indices: &mut Vec<u32>,
+    object: &Object,
+) {
+    let mut index = map.get(&i.0).map(|v| *v);
+
+    let uvw = i.1.map(|tex_index| {
+        if tex_index >= object.tex_vertices.len() {
+            println!("");
+        }
+        object.tex_vertices[tex_index]
+    });
+    let normal = i.2.map(|normal_index| {
+        if normal_index >= object.normals.len() {
+            println!("");
+        }
+        object.normals[normal_index]
+
+    });
+
+    if let Some(ind) = index {
+        if let Some(tex) = uvw {
+            if ((uvs[ind].x - tex.u as f32) as f32).abs() > std::f32::EPSILON
+                || ((uvs[ind].y - tex.v as f32) as f32).abs() > std::f32::EPSILON
+            {
+                index = None;
+            }
+        }
+        if let Some(n) = normal {
+            if ((normals[ind].x - n.x as f32) as f32).abs() > std::f32::EPSILON
+                || ((normals[ind].y - n.y as f32) as f32).abs() > std::f32::EPSILON
+                || ((normals[ind].z - n.z as f32) as f32).abs() > std::f32::EPSILON
+            {
+                index = None;
+            }
+        }
+    }
+
+    if index.is_none() {
+        index = Some(positions.len());
+        map.insert(i.0, index.unwrap());
+        let position = object.vertices[i.0];
+        positions.push(Vector3::new(position.x, position.y, position.z));
+
+        if let Some(tex) = uvw {
+            uvs.push(Vec2::new(tex.u as f32, 1.0 - tex.v as f32));
+        }
+        if let Some(n) = normal {
+            normals.push(Vec3::new(n.x as f32, n.y as f32, n.z as f32));
+        }
+    }
+
+    indices.push(index.unwrap() as u32);
 }
 
 #[cfg(test)]
