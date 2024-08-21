@@ -1,18 +1,34 @@
 use crate::{geometry::*, io::RawAssets, material::*, Node, Result, Scene};
 use std::collections::{HashMap, HashSet};
+
 use std::path::{Path, PathBuf};
 use wavefront_obj::obj::Object;
 
 pub fn dependencies_obj(raw_assets: &RawAssets, path: &PathBuf) -> HashSet<PathBuf> {
     let mut dependencies = HashSet::new();
-    if let Ok(Ok(obj)) =
-        std::str::from_utf8(raw_assets.get(path).unwrap()).map(|s| wavefront_obj::obj::parse(s))
-    {
-        let base_path = path.parent().unwrap_or(Path::new(""));
-        if let Some(material_library) = obj.material_library {
-            dependencies.insert(base_path.join(material_library));
+    let file = std::fs::File::open(path).unwrap();
+    let reader = std::io::BufReader::new(file);
+    use std::io::BufRead;
+    let lines = reader.lines().enumerate();
+    for (_index, bufread) in lines {
+        let line = bufread.unwrap_or_default();
+        if line.starts_with("mtllib") {
+            let base_path = path.parent().unwrap_or(Path::new(""));
+            let material_library =  line.trim().split(" ").nth(1).unwrap();
+            let p = PathBuf::from(material_library);
+            dependencies.insert(base_path.join(p));
+            break;
         }
     }
+
+    // if let Ok(Ok(obj)) =
+    //     std::str::from_utf8(raw_assets.get(path).unwrap()).map(|s| wavefront_obj::obj::parse(s))
+    // {
+    //     let base_path = path.parent().unwrap_or(Path::new(""));
+    //         if let Some(material_library) = obj.material_library {
+    //         dependencies.insert(base_path.join(material_library));
+    //     }
+    // }
     dependencies
 }
 
@@ -223,7 +239,6 @@ fn process(
             println!("");
         }
         object.normals[normal_index]
-
     });
 
     if let Some(ind) = index {
