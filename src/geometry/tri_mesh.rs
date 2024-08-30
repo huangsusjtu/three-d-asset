@@ -1,4 +1,5 @@
 use crate::{prelude::*, Error, Indices, Positions, Result};
+use std::f32::consts::PI;
 
 ///
 /// A CPU-side version of a triangle mesh.
@@ -102,7 +103,7 @@ impl TriMesh {
         Ok(())
     }
 
-    ///
+    /// 正方形
     /// Returns a square mesh spanning the xy-plane with positions in the range `[-1..1]` in the x and y axes.
     ///
     pub fn square() -> Self {
@@ -142,7 +143,7 @@ impl TriMesh {
         }
     }
 
-    ///
+    /// 圆
     /// Returns a circle mesh spanning the xy-plane with radius 1 and center in `(0, 0, 0)`.
     ///
     pub fn circle(angle_subdivisions: u32) -> Self {
@@ -169,7 +170,7 @@ impl TriMesh {
         }
     }
 
-    ///
+    /// 球体
     /// Returns a sphere mesh with radius 1 and center in `(0, 0, 0)`.
     ///
     pub fn sphere(angle_subdivisions: u32) -> Self {
@@ -232,7 +233,7 @@ impl TriMesh {
         }
     }
 
-    ///
+    /// 立方体
     /// Returns an axis aligned unconnected cube mesh with positions in the range `[-1..1]` in all axes.
     ///
     pub fn cube() -> Self {
@@ -334,7 +335,7 @@ impl TriMesh {
         mesh
     }
 
-    ///
+    /// 圆柱体
     /// Returns a cylinder mesh around the x-axis in the range `[0..1]` and with radius 1.
     ///
     pub fn cylinder(angle_subdivisions: u32) -> Self {
@@ -369,7 +370,7 @@ impl TriMesh {
         mesh
     }
 
-    ///
+    /// 圆锥体
     /// Returns a cone mesh around the x-axis in the range `[0..1]` and with radius 1 at -1.0.
     ///
     pub fn cone(angle_subdivisions: u32) -> Self {
@@ -408,7 +409,7 @@ impl TriMesh {
         mesh
     }
 
-    ///
+    /// 箭头
     /// Returns an arrow mesh around the x-axis in the range `[0..1]` and with radius 1.
     /// The tail length and radius should be in the range `]0..1[`.
     ///
@@ -444,6 +445,60 @@ impl TriMesh {
             .unwrap()
             .extend(cone.normals.as_ref().unwrap());
         arrow
+    }
+
+    /// 曲线
+    ///
+    pub fn line_curve(points: &[Vec3], thickness: f32) -> Self {
+        let mut indices = vec![];
+        let mut positions = Vec::with_capacity(points.len() * 2);
+        // let mut uvs = Vec::with_capacity(points.len() * 2);
+
+        for i in 1..points.len() {
+            let theta = {
+                let mut theta =
+                    (points[i].y - points[i - 1].y).atan2(points[i].x - points[i - 1].x);
+                theta + PI / 2.0
+            };
+            let (delta_x, delta_y) = (theta.cos() * thickness / 2.0, theta.sin() * thickness / 2.0);
+
+            if i == 1 {
+                positions.push(Vec3::new(
+                    points[i - 1].x + delta_x,
+                    points[i - 1].y + delta_y,
+                    points[i - 1].z,
+                ));
+                positions.push(Vec3::new(
+                    points[i - 1].x - delta_x,
+                    points[i - 1].y - delta_y,
+                    points[i - 1].z,
+                ));
+            }
+            positions.push(Vec3::new(
+                points[i].x + delta_x,
+                points[i].y + delta_y,
+                points[i].z,
+            ));
+            positions.push(Vec3::new(
+                points[i].x - delta_x,
+                points[i].y - delta_y,
+                points[i].z,
+            ));
+            let e = (positions.len() - 1) as u32;
+            indices.extend([e, e - 1, e - 2]);
+            indices.extend([e - 1, e - 2, e - 3]);
+        }
+
+        let normals = vec![Vec3::new(0.0, 0.0, 1.0); positions.len()];
+        let tangents = vec![Vec4::new(1.0, 0.0, 0.0, 1.0); positions.len()];
+        return TriMesh {
+            positions: Positions::F32(positions),
+            indices: Indices::U32(indices),
+            normals: Some(normals),
+            tangents: Some(tangents),
+            uvs: None,
+            colors: None,
+        };
     }
 
     ///

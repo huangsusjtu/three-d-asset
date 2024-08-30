@@ -14,7 +14,7 @@ pub fn dependencies_obj(raw_assets: &RawAssets, path: &PathBuf) -> HashSet<PathB
         let line = bufread.unwrap_or_default();
         if line.starts_with("mtllib") {
             let base_path = path.parent().unwrap_or(Path::new(""));
-            let material_library =  line.trim().split(" ").nth(1).unwrap();
+            let material_library = line.trim().split(" ").nth(1).unwrap();
             let p = PathBuf::from(material_library);
             dependencies.insert(base_path.join(p));
             break;
