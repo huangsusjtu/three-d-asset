@@ -135,7 +135,7 @@ pub fn deserialize_obj(raw_assets: &mut RawAssets, path: &PathBuf) -> Result<Sce
     // Parse meshes
     let mut nodes = Vec::new();
     for object in obj.objects.iter() {
-        println!("{}", object.name);
+        // println!("{}", object.name);
         // Objects consisting of several meshes with different materials
         for mesh in object.geometry.iter() {
             // All meshes with different materials

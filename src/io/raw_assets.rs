@@ -65,17 +65,23 @@ impl RawAssets {
             Ok(path.into())
         } else {
             let p = path.to_str().unwrap().replace('\\', "/");
-            let p = if p.ends_with(".jpeg") {
-                p[0..p.len() - 2].to_string()
-            } else if p.ends_with(".jpg") {
-                p[0..p.len() - 1].to_string()
-            } else {
-                p
-            };
+            // let p = if p.ends_with(".jpeg") {
+            //     p[0..p.len() - 2].to_string()
+            // } else if p.ends_with(".jpg") {
+            //     p[0..p.len() - 1].to_string()
+            // } else {
+            //     p
+            // };
             self.0
                 .iter()
-                .find(|(k, _)| k.to_str().unwrap().contains(&p))
-                .map(|(k, _)| k.clone())
+                .find(|(k, _)| {
+                    let filename = k.file_name().unwrap().to_str().unwrap();
+                    filename.starts_with(&p)
+                })
+                .map(|(k, _)| {
+                    //
+                    k.clone()
+                })
                 .ok_or(Error::NotLoaded(path.to_str().unwrap().to_string()))
         }
     }

@@ -450,10 +450,8 @@ impl TriMesh {
     /// 曲线
     ///
     pub fn line_curve(points: &[Vec3], thickness: f32) -> Self {
-        let mut indices = vec![];
+        let mut indices = Vec::with_capacity(points.len() * 2);
         let mut positions = Vec::with_capacity(points.len() * 2);
-        // let mut uvs = Vec::with_capacity(points.len() * 2);
-
         for i in 1..points.len() {
             let theta = {
                 let mut theta =
@@ -489,16 +487,153 @@ impl TriMesh {
             indices.extend([e - 1, e - 2, e - 3]);
         }
 
-        let normals = vec![Vec3::new(0.0, 0.0, 1.0); positions.len()];
-        let tangents = vec![Vec4::new(1.0, 0.0, 0.0, 1.0); positions.len()];
+        // let normals = vec![Vec3::new(0.0, 0.0, 1.0); positions.len()];
+        // let tangents = vec![Vec4::new(1.0, 0.0, 0.0, 1.0); positions.len()];
         return TriMesh {
             positions: Positions::F32(positions),
             indices: Indices::U32(indices),
-            normals: Some(normals),
-            tangents: Some(tangents),
-            uvs: None,
-            colors: None,
+            ..Default::default()
         };
+    }
+
+    /// 多边形,  凸多边形还有问题
+    pub fn polygon(points: &[Vec3]) -> Self {
+        if points.len() < 3 {
+            panic!("polygon points num must >= 3");
+        }
+        let mut indices = Vec::with_capacity(points.len());
+        let mut positions = Vec::with_capacity(points.len());
+
+        positions.push(points[0].clone());
+        positions.push(points[1].clone());
+        for i in 2..points.len() {
+            positions.push(points[i].clone());
+            let l = (positions.len() - 1) as u32;
+            indices.extend([l, l - 1, 0]);
+        }
+
+        return TriMesh {
+            positions: Positions::F32(positions),
+            indices: Indices::U32(indices),
+            ..Default::default()
+        };
+    }
+
+    /// 条状形， 用于画lane
+    pub fn curved_bar(
+        mut left_points: Vec<Vec3>,
+        mut right_points: Vec<Vec3>,
+        use_texture: bool,
+    ) -> Self {
+        if left_points.len() > right_points.len() {
+            // 短的作为l, 长的是r
+            let a = left_points;
+            left_points = right_points;
+            right_points = a;
+        }
+        if left_points.len() < 2 {
+            panic!("polygon points num must >= 3");
+        }
+        // tracing::info!("right - left {}", right_points.len() - left_points.len());
+        let mut indices = Vec::with_capacity(left_points.len() + right_points.len());
+        let mut positions = Vec::with_capacity(left_points.len() + right_points.len());
+
+        let (l_len, r_len) = (left_points.len() as u32, right_points.len() as u32);
+        positions.append(left_points.as_mut());
+        positions.append(right_points.as_mut());
+        for i in 1..l_len as u32 {
+            indices.extend([i - 1, i, i + l_len]);
+            indices.extend([i - 1, i + l_len - 1, i + l_len]);
+        }
+
+        for i in 0..(r_len - l_len) {
+            // 把 长的那条线多余的点 和 短的线最后一个点 补充三角形
+            indices.extend([l_len - 1, l_len + r_len - i - 2, l_len + r_len - i - 1]);
+        }
+
+        let uvs = if use_texture {
+            let mut uvs = Vec::with_capacity(positions.len());
+            positions.iter().for_each(|v| {
+                uvs.push(Vec2::new(v.x, v.y));
+            });
+            Some(uvs)
+        } else {
+            None
+        };
+        return TriMesh {
+            positions: Positions::F32(positions),
+            indices: Indices::U32(indices),
+            uvs,
+            ..Default::default()
+        };
+    }
+
+    /// 条状形， 用于画lane
+    // pub fn curved_bar(mut l_points: Vec<Vec3>, mut r_points: Vec<Vec3>) -> Self {
+    //     if l_points.len() < 3 || r_points.len() < 3 {
+    //         panic!("polygon points num must >= 2");
+    //     }
+    //     let mut indices = Vec::with_capacity(l_points.len() + r_points.len());
+    //     let mut positions = Vec::with_capacity(l_points.len() + r_points.len());
+    //
+    //     for i in 0..l_points.len() / 2 {
+    //         positions.push(l_points[i].clone());
+    //         positions.push(r_points[i].clone());
+    //         if positions.len() > 3 {
+    //             // 当前至少有4个点才能搞出两个三角形， l>=3
+    //             let l = (positions.len() - 1) as u32;
+    //             indices.extend([l, l - 1, l - 2]);
+    //             indices.extend([l - 1, l - 2, l - 3]);
+    //         }
+    //     }
+    //
+    //     let last_l = (positions.len() - 2) as u32;
+    //     let last_r = (positions.len() - 1) as u32;
+    //     while i < l_points.len() {
+    //         positions.push(l_points[i].clone());
+    //         let l = (positions.len() - 1) as u32;
+    //         indices.extend([l, l - 1, last_r]);
+    //         i = i + 1;
+    //     }
+    //     while i < r_points.len() {
+    //         positions.push(r_points[i].clone());
+    //         let l = (positions.len() - 1) as u32;
+    //         indices.extend([l, l - 1, last_l]);
+    //         i = i + 1;
+    //     }
+    //
+    //     return TriMesh {
+    //         positions: Positions::F32(positions),
+    //         indices: Indices::U32(indices),
+    //         ..Default::default()
+    //     };
+    // }
+
+    pub fn rectangle(center: Vec3, range: Vec2, use_texture: bool) -> Self {
+        let indices = vec![0u8, 1, 2, 2, 3, 0];
+        let positions = vec![
+            Vec3::new(center.x - range.x / 2.0, center.y - range.y / 2.0, center.z),
+            Vec3::new(center.x - range.x / 2.0, center.y + range.y / 2.0, center.z),
+            Vec3::new(center.x + range.x / 2.0, center.y + range.y / 2.0, center.z),
+            Vec3::new(center.x + range.x / 2.0, center.y - range.y / 2.0, center.z),
+        ];
+
+        let uvs = if use_texture {
+            let mut uvs = Vec::with_capacity(positions.len());
+            positions.iter().for_each(|v| {
+                uvs.push(Vec2::new(v.x, v.y));
+            });
+            Some(uvs)
+        } else {
+            None
+        };
+
+        TriMesh {
+            indices: Indices::U8(indices),
+            positions: Positions::F32(positions),
+            uvs,
+            ..Default::default()
+        }
     }
 
     ///
@@ -679,7 +814,6 @@ impl TriMesh {
             }
             Ok(())
         };
-
         buffer_check(Some(self.positions.len()), "position")?;
         buffer_check(self.normals.as_ref().map(|b| b.len()), "normal")?;
         buffer_check(self.tangents.as_ref().map(|b| b.len()), "tangent")?;
